@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShopOS — Business Manager for Nepali Shops</title>
+<meta name="description" content="Complete business management for Nepali shops — inventory, billing, QR payments, WhatsApp orders, online catalog, Google Maps & social media tools." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⬡</text></svg>" />
+
+<!-- Google Fonts: Latin + Devanagari -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800;900&family=Noto+Sans+Devanagari:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- React 18 -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Babel standalone (compiles JSX directly in the browser, no build step needed) -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { background:#070d1a; }
+  body { font-family:'Noto Sans','Noto Sans Devanagari',sans-serif; -webkit-font-smoothing:antialiased; }
+  #root { min-height:100vh; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:#0e1625; }
+  ::-webkit-scrollbar-thumb { background:#1a2840; border-radius:4px; }
+  ::-webkit-scrollbar-thumb:hover { background:#27406b; }
+  input::placeholder, textarea::placeholder { color:#5a7090; opacity:0.8; }
+  button { font-family:inherit; }
+  #loading-screen {
+    position:fixed; inset:0; background:#070d1a; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; z-index:9999;
+  }
+  #loading-screen .mark {
+    width:52px; height:52px; border-radius:14px;
+    background:linear-gradient(135deg,#00c9ff,#7c3aed);
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  #loading-screen .label { color:#5a7090; font-size:13px; font-weight:600; letter-spacing:0.5px; }
+  @keyframes pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.08); opacity:0.85; } }
+  #error-screen {
+    position:fixed; inset:0; background:#070d1a; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; z-index:10000; padding:30px; text-align:center;
+  }
+  #error-screen.show { display:flex; }
+  #error-screen .icon { font-size:36px; }
+  #error-screen .title { color:#ff4444; font-weight:800; font-size:18px; }
+  #error-screen .msg { color:#5a7090; font-size:13px; max-width:600px; line-height:1.6; white-space:pre-wrap; text-align:left; background:#131e30; border:1px solid #1a2840; border-radius:10px; padding:16px; font-family:monospace; }
+  #error-screen .hint { color:#e8f0fe; font-size:13px; }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="mark">⬡</div>
+  <div class="label">Loading ShopOS…</div>
+</div>
+<div id="error-screen">
+  <div class="icon">⚠️</div>
+  <div class="title">ShopOS couldn't start</div>
+  <div class="hint">Open the browser console (F12 → Console tab) for full details. Common fix: hard-refresh the page (Ctrl+Shift+R), since this checks an internet connection to load React from a CDN.</div>
+  <div class="msg" id="error-detail"></div>
+</div>
+<div id="root"></div>
+
+<script>
+  window.addEventListener('error', function(e) {
+    const loading = document.getElementById('loading-screen');
+    const errBox = document.getElementById('error-screen');
+    const detail = document.getElementById('error-detail');
+    if (loading) loading.style.display = 'none';
+    if (errBox) errBox.classList.add('show');
+    if (detail) detail.textContent = (e.message || 'Unknown error') + '\n' + (e.filename ? ('in ' + e.filename + ':' + e.lineno) : '');
+  });
+  setTimeout(function() {
+    const root = document.getElementById('root');
+    const loading = document.getElementById('loading-screen');
+    if (root && root.children.length === 0 && loading && loading.style.display !== 'none') {
+      loading.style.display = 'none';
+      const errBox = document.getElementById('error-screen');
+      const detail = document.getElementById('error-detail');
+      if (errBox) errBox.classList.add('show');
+      if (detail) detail.textContent = 'App did not start within 12 seconds.\nThis usually means React, ReactDOM, or Babel could not load from unpkg.com — check your internet connection or try a different network (some networks/firewalls block CDN scripts).';
+    }
+  }, 12000);
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, createContext, useContext } = React;
+
+
+const C = {
+  bg:"#070d1a", surface:"#0e1625", card:"#131e30", border:"#1a2840",
+  accent:"#00c9ff", green:"#00e676", orange:"#ff6d00", purple:"#7c3aed",
+  red:"#ff4444", yellow:"#ffd600", text:"#e8f0fe", muted:"#5a7090", gold:"#f59e0b",
+};
+
+const LangCtx = createContext({ lang:"np", setLang:()=>{} });
+const useLang = () => useContext(LangCtx);
+
+const T = {
+  en:{
+    heroTitle:"Run Your Shop Smarter",
+    heroSub:"Complete business management for Nepali shops — inventory, billing, QR payments, WhatsApp orders & more.",
+    getStarted:"Start Free Trial",
+    pricingTitle:"Simple, Honest Pricing", pricingFor:"For every shop in Nepal",
+    perMonth:"/mo", startTrial:"Start 14-Day Free Trial",
+    login:"Login", email:"Email", password:"Password", shopName:"Shop Name",
+    phone:"Phone Number", confirmPass:"Confirm Password",
+    loginBtn:"Login to ShopOS", signupBtn:"Create Account",
+    goodMorning:"Good morning,", shopOwner:"Shop Owner 👋",
+    todaySummary:"Here's what's happening at your store today",
+    todaySales:"Today's Sales", ordersLabel:"Orders", lowStock:"Low Stock", pendingInvoices:"Pending",
+    weeklySales:"Weekly Sales", topSelling:"Top Selling Today", unitsSold:"sold",
+    quickActions:"⚡ Quick Actions", newInvoice:"+ New Invoice", addProduct:"+ Add Product",
+    viewReport:"📊 Report", showQR:"💳 QR Code",
+    inventoryTitle:"Inventory", lowStockItems:"low stock",
+    addProductBtn:"+ Add Product", searchProduct:"🔍 Search products or SKU...",
+    productName:"Product Name", skuCode:"SKU", category:"Category",
+    price:"Price (रू)", stockQty:"Stock Qty", lowStockAlert:"Low Stock Alert",
+    save:"Save", cancel:"Cancel", product:"Product", stock:"Stock", status:"Status",
+    billingTitle:"Billing & Invoices", billingSubtitle:"Create and manage all invoices",
+    selectProducts:"Select Products", customerName:"Customer name",
+    cart:"Cart", noItems:"No items added yet", total:"Total",
+    createInvoice:"Create Invoice", invoiceNo:"Invoice", customer:"Customer",
+    amount:"Amount", date:"Date",
+    qrTitle:"QR Payment", qrSubtitle:"Generate payment QR codes instantly",
+    upiLabel:"FonePay / QR ID", amountOptional:"Amount (रू) — optional",
+    enterAmount:"Enter amount or leave blank", noteLabel:"Note / Invoice #",
+    generateBtn:"⚡ Generate QR", paymentQR:"Payment QR",
+    scanHint:"Scan with eSewa / Khalti / FonePay", shareBtn:"📤 Share", printBtn:"🖨️ Print",
+    reportsTitle:"Sales & Reports", reportsSubtitle:"Weekly performance overview",
+    weeklySalesLabel:"Weekly Sales", weeklyProfit:"Weekly Profit",
+    dailyAvg:"Daily Average", profitMargin:"Profit Margin",
+    dailyBreakdown:"Daily Breakdown", salesByCategory:"Sales by Category",
+    exportReports:"Export Reports",
+    customersTitle:"Customers", customersRegistered:"customers",
+    totalCustomers:"Total Customers", returning:"Returning", avgSpend:"Avg Spend",
+    searchCustomers:"🔍 Search customers...", customerProfile:"Customer Profile",
+    totalOrders:"Total Orders", totalSpent:"Total Spent", lastVisit:"Last Visit",
+    whatsappBtn:"💬 WhatsApp", invoiceBtn:"🧾 Invoice",
+    waTitle:"WhatsApp Orders", waSubtitle:"Manage customer orders from WhatsApp",
+    newOrders:"New", replied:"Replied", fulfilled:"Fulfilled",
+    typeReply:"Type reply...", send:"Send", createInvoiceBtn:"Create Invoice",
+    catalogTitle:"Online Catalog", catalogSubtitle:"Your public storefront & mini website",
+    storeLink:"Your Store Link", shareLink:"📤 Share Link", customize:"✏️ Customize",
+    orderViaWA:"💬 Order via WhatsApp",
+    mapsTitle:"Google Maps", mapsSubtitle:"Manage your Google Business Profile",
+    businessProfile:"Business Profile", businessName:"Business Name",
+    address:"Address", hours:"Opening Hours", updateListing:"📍 Update Listing",
+    listingPerf:"Listing Performance", viewsMonth:"Views this month",
+    searchesFound:"Searches found you", directionsReq:"Direction requests",
+    callsListing:"Calls from listing", customerReviews:"Customer Reviews",
+    basedOn:"Based on", reviews:"reviews",
+    socialTitle:"Social Media", socialSubtitle:"Post to all platforms from one place",
+    createPost:"✍️ Create Post", writeCaption:"Write your caption here...",
+    addImage:"🖼️ Add Image", addOffer:"🏷️ Add Offer", schedule:"⏰ Schedule",
+    postAll:"Post to All Platforms", templates:"Post Templates",
+    trialDays:"days left in trial", upgradePlan:"Upgrade Plan",
+  },
+  np:{
+    heroTitle:"आफ्नो पसल स्मार्ट तरिकाले चलाउनुहोस्",
+    heroSub:"नेपाली पसलहरूको लागि सम्पूर्ण व्यापार व्यवस्थापन — स्टक, बिलिङ, QR भुक्तानी, WhatsApp अर्डर र थप।",
+    getStarted:"नि:शुल्क ट्रायल सुरु गर्नुहोस्",
+    pricingTitle:"सरल र इमानदार मूल्य", pricingFor:"नेपालका हरेक पसलको लागि",
+    perMonth:"/महिना", startTrial:"१४ दिन नि:शुल्क ट्रायल",
+    login:"लगइन", email:"इमेल", password:"पासवर्ड", shopName:"पसलको नाम",
+    phone:"फोन नम्बर", confirmPass:"पासवर्ड पुष्टि",
+    loginBtn:"ShopOS मा लगइन", signupBtn:"खाता बनाउनुहोस्",
+    goodMorning:"शुभ प्रभात,", shopOwner:"पसल मालिक 👋",
+    todaySummary:"आज तपाईंको पसलमा के भइरहेको छ",
+    todaySales:"आजको बिक्री", ordersLabel:"अर्डर", lowStock:"कम स्टक", pendingInvoices:"बाँकी",
+    weeklySales:"साप्ताहिक बिक्री", topSelling:"आज सबैभन्दा बढी बिकेको", unitsSold:"बिक्यो",
+    quickActions:"⚡ छिटो काम", newInvoice:"+ नयाँ बिल", addProduct:"+ सामान थप्नुहोस्",
+    viewReport:"📊 रिपोर्ट", showQR:"💳 QR कोड",
+    inventoryTitle:"स्टक व्यवस्थापन", lowStockItems:"कम स्टक",
+    addProductBtn:"+ सामान थप्नुहोस्", searchProduct:"🔍 सामान वा SKU खोज्नुहोस्...",
+    productName:"सामानको नाम", skuCode:"SKU कोड", category:"श्रेणी",
+    price:"मूल्य (रू)", stockQty:"स्टक", lowStockAlert:"कम स्टक सूचना",
+    save:"सुरक्षित", cancel:"रद्द", product:"सामान", stock:"स्टक", status:"स्थिति",
+    billingTitle:"बिलिङ र बिजक", billingSubtitle:"सबै बिजक बनाउनुहोस्",
+    selectProducts:"सामान छान्नुहोस्", customerName:"ग्राहकको नाम",
+    cart:"कार्ट", noItems:"कुनै सामान थपिएको छैन", total:"जम्मा",
+    createInvoice:"बिजक बनाउनुहोस्", invoiceNo:"बिजक", customer:"ग्राहक",
+    amount:"रकम", date:"मिति",
+    qrTitle:"QR भुक्तानी", qrSubtitle:"तुरुन्त QR कोड बनाउनुहोस्",
+    upiLabel:"FonePay / QR आईडी", amountOptional:"रकम (रू) — वैकल्पिक",
+    enterAmount:"रकम लेख्नुहोस्", noteLabel:"नोट / बिजक नम्बर",
+    generateBtn:"⚡ QR बनाउनुहोस्", paymentQR:"भुक्तानी QR",
+    scanHint:"eSewa / Khalti / FonePay बाट स्क्यान", shareBtn:"📤 साझा", printBtn:"🖨️ प्रिन्ट",
+    reportsTitle:"बिक्री र रिपोर्ट", reportsSubtitle:"साप्ताहिक कार्यसम्पादन",
+    weeklySalesLabel:"साप्ताहिक बिक्री", weeklyProfit:"साप्ताहिक नाफा",
+    dailyAvg:"दैनिक औसत", profitMargin:"नाफा दर",
+    dailyBreakdown:"दैनिक विवरण", salesByCategory:"श्रेणी अनुसार बिक्री",
+    exportReports:"रिपोर्ट निर्यात",
+    customersTitle:"ग्राहक डेटाबेस", customersRegistered:"ग्राहकहरू",
+    totalCustomers:"कुल ग्राहक", returning:"फर्कने", avgSpend:"औसत खर्च",
+    searchCustomers:"🔍 ग्राहक खोज्नुहोस्...", customerProfile:"ग्राहक प्रोफाइल",
+    totalOrders:"कुल अर्डर", totalSpent:"कुल खर्च", lastVisit:"अन्तिम भ्रमण",
+    whatsappBtn:"💬 WhatsApp", invoiceBtn:"🧾 बिजक",
+    waTitle:"WhatsApp अर्डर", waSubtitle:"WhatsApp बाट अर्डर व्यवस्थापन",
+    newOrders:"नयाँ", replied:"जवाफ दिइयो", fulfilled:"पूरा भयो",
+    typeReply:"जवाफ लेख्नुहोस्...", send:"पठाउनुहोस्", createInvoiceBtn:"बिजक बनाउनुहोस्",
+    catalogTitle:"अनलाइन सूची", catalogSubtitle:"तपाईंको सार्वजनिक उत्पाद सूची",
+    storeLink:"तपाईंको पसलको लिंक", shareLink:"📤 लिंक साझा", customize:"✏️ अनुकूलन",
+    orderViaWA:"💬 WhatsApp मा अर्डर",
+    mapsTitle:"गुगल म्याप्स", mapsSubtitle:"Google Business Profile व्यवस्थापन",
+    businessProfile:"व्यापार प्रोफाइल", businessName:"व्यापारको नाम",
+    address:"ठेगाना", hours:"खुल्ने समय", updateListing:"📍 Google सूची अपडेट",
+    listingPerf:"सूची कार्यसम्पादन", viewsMonth:"यो महिना हेरिएको",
+    searchesFound:"खोजीमा भेटिएको", directionsReq:"दिशा अनुरोध",
+    callsListing:"सूचीबाट कल", customerReviews:"ग्राहक समीक्षा",
+    basedOn:"आधारित", reviews:"समीक्षामा",
+    socialTitle:"सोसल मिडिया", socialSubtitle:"एक ठाउँबाट सबै प्लेटफर्म",
+    createPost:"✍️ पोस्ट बनाउनुहोस्", writeCaption:"यहाँ क्याप्शन लेख्नुहोस्...",
+    addImage:"🖼️ तस्वीर", addOffer:"🏷️ अफर", schedule:"⏰ तालिका",
+    postAll:"सबै प्लेटफर्ममा पोस्ट", templates:"पोस्ट टेम्प्लेट",
+    trialDays:"दिन बाँकी ट्रायलमा", upgradePlan:"योजना अपग्रेड गर्नुहोस्",
+  }
+};
+
+const PRODUCTS = [
+  {id:1,name:"बासमती चामल ५ के.जी.",nameEn:"Basmati Rice 5kg",sku:"RICE001",category:"किराना",categoryEn:"Grocery",price:850,stock:42,low:10},
+  {id:2,name:"सूर्यमुखी तेल १ लि.",nameEn:"Sunflower Oil 1L",sku:"OIL002",category:"किराना",categoryEn:"Grocery",price:180,stock:6,low:10},
+  {id:3,name:"कोका–कोला १.५ लि.",nameEn:"Coca-Cola 1.5L",sku:"BEV003",category:"पेय",categoryEn:"Beverage",price:95,stock:24,low:12},
+  {id:4,name:"डिटर्जेन्ट पाउडर",nameEn:"Detergent 1kg",sku:"CLN004",category:"सफाई",categoryEn:"Cleaning",price:220,stock:18,low:8},
+  {id:5,name:"पाउरोटी",nameEn:"Bread Loaf",sku:"BAK005",category:"बेकरी",categoryEn:"Bakery",price:45,stock:3,low:5},
+  {id:6,name:"दूध ५०० मि.ली.",nameEn:"Milk 500ml",sku:"DAI006",category:"दुग्ध",categoryEn:"Dairy",price:30,stock:30,low:15},
+];
+const CUSTOMERS_DATA = [
+  {id:1,name:"रवि कुमार",nameEn:"Ravi Kumar",phone:"+977 98765-43210",orders:14,spent:12400,lastVisit:"२ दिन अघि",lastVisitEn:"2 days ago"},
+  {id:2,name:"प्रिया शर्मा",nameEn:"Priya Sharma",phone:"+977 87654-32109",orders:8,spent:6800,lastVisit:"आज",lastVisitEn:"Today"},
+  {id:3,name:"मोहम्मद अली",nameEn:"Mohammed Ali",phone:"+977 76543-21098",orders:22,spent:18900,lastVisit:"१ हप्ता अघि",lastVisitEn:"1 week ago"},
+  {id:4,name:"सुनिता पटेल",nameEn:"Sunita Patel",phone:"+977 65432-10987",orders:5,spent:3200,lastVisit:"३ दिन अघि",lastVisitEn:"3 days ago"},
+];
+const INVOICES_DATA = [
+  {id:"INV-001",customerNp:"रवि कुमार",customerEn:"Ravi Kumar",amount:1250,status:"paid",date:"जेठ २३"},
+  {id:"INV-002",customerNp:"प्रिया शर्मा",customerEn:"Priya Sharma",amount:680,status:"pending",date:"जेठ २२"},
+  {id:"INV-003",customerNp:"गेस्ट ग्राहक",customerEn:"Walk-in",amount:345,status:"paid",date:"जेठ २२"},
+  {id:"INV-004",customerNp:"मोहम्मद अली",customerEn:"Mohammed Ali",amount:2100,status:"overdue",date:"जेठ १७"},
+];
+const SALES = [
+  {dayNp:"सोम",dayEn:"Mon",sales:4200,profit:1100},
+  {dayNp:"मंगल",dayEn:"Tue",sales:5800,profit:1600},
+  {dayNp:"बुध",dayEn:"Wed",sales:3900,profit:980},
+  {dayNp:"बिहि",dayEn:"Thu",sales:6700,profit:1900},
+  {dayNp:"शुक्र",dayEn:"Fri",sales:7200,profit:2100},
+  {dayNp:"शनि",dayEn:"Sat",sales:9100,profit:2800},
+  {dayNp:"आइत",dayEn:"Sun",sales:5400,profit:1500},
+];
+const WA_ORDERS = [
+  {id:1,nameNp:"प्रिया शर्मा",nameEn:"Priya Sharma",phone:"+977 87654-32109",msgNp:"२ थैला चामल र ३ बोतल तेल चाहियो",msgEn:"Need 2 bags rice and 3 bottles oil",time:"बिहान १०:२४",status:"new"},
+  {id:2,nameNp:"राजेश नायर",nameEn:"Rajesh Nair",phone:"+977 99887-76655",msgNp:"आज ताजा पाउरोटी छ?",msgEn:"Do you have fresh bread today?",time:"बिहान ९:१५",status:"replied"},
+  {id:3,nameNp:"सुनिता पटेल",nameEn:"Sunita Patel",phone:"+977 65432-10987",msgNp:"अघिल्लो अर्डर जस्तै",msgEn:"Same as last order please",time:"हिजो",status:"fulfilled"},
+];
+
+function Badge({status}){
+  const {lang}=useLang();
+  const M={
+    paid:{bg:"#00e67620",c:C.green,l:{en:"Paid",np:"भुक्तानी"}},
+    pending:{bg:"#ffd60020",c:C.yellow,l:{en:"Pending",np:"बाँकी"}},
+    overdue:{bg:"#ff444420",c:C.red,l:{en:"Overdue",np:"म्याद गुज्रेको"}},
+    new:{bg:"#00c9ff20",c:C.accent,l:{en:"New",np:"नयाँ"}},
+    replied:{bg:"#7c3aed20",c:C.purple,l:{en:"Replied",np:"जवाफ दिइयो"}},
+    fulfilled:{bg:"#00e67620",c:C.green,l:{en:"Fulfilled",np:"पूरा भयो"}},
+    ok:{bg:"#00e67620",c:C.green,l:{en:"OK",np:"ठिक"}},
+    low:{bg:"#ff6d0020",c:C.orange,l:{en:"Low",np:"कम"}},
+    active:{bg:"#00e67620",c:C.green,l:{en:"Active",np:"सक्रिय"}},
+    trial:{bg:"#f59e0b20",c:C.gold,l:{en:"Trial",np:"ट्रायल"}},
+    expired:{bg:"#ff444420",c:C.red,l:{en:"Expired",np:"समाप्त"}},
+  };
+  const s=M[status]||M.pending;
+  return <span style={{background:s.bg,color:s.c,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{s.l[lang]}</span>;
+}
+function Input({value,onChange,placeholder,type="text",style={}}){
+  return <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+    style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,color:C.text,padding:"9px 13px",borderRadius:8,fontSize:13,boxSizing:"border-box",fontFamily:"inherit",outline:"none",...style}}/>;
+}
+function Btn({onClick,children,variant="primary",style={}}){
+  const base={border:"none",padding:"9px 18px",borderRadius:9,fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"};
+  const v={
+    primary:{background:`linear-gradient(135deg,${C.accent},${C.purple})`,color:"#fff"},
+    green:{background:C.green,color:"#000"},ghost:{background:C.border,color:C.text},
+    wa:{background:"#25D366",color:"#fff"},gold:{background:`linear-gradient(135deg,${C.gold},#d97706)`,color:"#fff"},
+    red:{background:C.red,color:"#fff"},
+  };
+  return <button onClick={onClick} style={{...base,...(v[variant]||v.primary),...style}}>{children}</button>;
+}
+function Stat({label,value,change,color=C.accent,icon}){
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:0,right:0,width:70,height:70,background:color+"18",borderRadius:"0 14px 0 70px",display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"12px 12px 0 0",fontSize:20}}>{icon}</div>
+      <div style={{color:C.muted,fontSize:11,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6}}>{label}</div>
+      <div style={{color:C.text,fontSize:26,fontWeight:900,marginBottom:4}}>{value}</div>
+      {change&&<div style={{color,fontSize:11,fontWeight:600}}>{change}</div>}
+    </div>
+  );
+}
+function TrialBanner({user,onUpgrade}){
+  const {lang}=useLang();
+  if(!user||user.plan==="pro")return null;
+  const days=user.trialDays??14; const expired=days<=0;
+  return(
+    <div style={{background:expired?`${C.red}18`:`${C.gold}18`,border:`1px solid ${expired?C.red:C.gold}40`,borderRadius:10,padding:"10px 18px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:18}}>{expired?"🔒":"⏳"}</span>
+        <div>
+          <div style={{fontWeight:700,fontSize:13,color:expired?C.red:C.gold}}>{expired?(lang==="en"?"Your trial has ended":"ट्रायल समाप्त भयो"):`${days} ${T[lang].trialDays}`}</div>
+          <div style={{color:C.muted,fontSize:11}}>{lang==="en"?"Upgrade to keep all features":"सुविधाहरू राख्न अपग्रेड गर्नुहोस्"}</div>
+        </div>
+      </div>
+      <Btn onClick={onUpgrade} variant="gold" style={{fontSize:12,padding:"7px 16px"}}>{T[lang].upgradePlan}</Btn>
+    </div>
+  );
+}
+
+function Landing({onLogin,onSignup,onDemo}){
+  const {lang,setLang}=useLang(); const t=T[lang];
+  const [billing,setBilling]=useState("monthly");
+  const plans=[
+    {k:"basic",en:"Basic",np:"बेसिक",mo:399,yr:319,
+     fEn:["Inventory tracking","Digital billing","QR payments","Basic reports"],
+     fNp:["स्टक ट्र्याकिङ","डिजिटल बिलिङ","QR भुक्तानी","आधारभूत रिपोर्ट"]},
+    {k:"pro",en:"Pro",np:"प्रो",mo:799,yr:639,hi:true,
+     fEn:["All Basic features","Customer database","WhatsApp orders","Advanced reports"],
+     fNp:["बेसिकका सबै","ग्राहक डेटाबेस","WhatsApp अर्डर","विस्तृत रिपोर्ट"]},
+    {k:"ultimate",en:"Ultimate",np:"अल्टिमेट",mo:1499,yr:1199,
+     fEn:["All Pro features","Online catalog","Google Maps","Social media"],
+     fNp:["प्रोका सबै","अनलाइन सूची","गुगल म्याप्स","सोसल मिडिया"]},
+  ];
+  const tms=[
+    {av:"सु",en:"Suresh Maharjan",np:"सुरेश महर्जन",sEn:"Maharjan Kirana, Lalitpur",sNp:"महर्जन किराना, ललितपुर",qEn:"Accounts used to take 1 hour daily. Now 10 minutes.",qNp:"हिसाब किताबमा १ घण्टा लाग्थ्यो। अब १० मिनेटमा।"},
+    {av:"री",en:"Reena Thapa",np:"रीना थापा",sEn:"Thapa Store, Bhaktapur",sNp:"थापा स्टोर, भक्तपुर",qEn:"WhatsApp orders boosted my sales by 30%.",qNp:"WhatsApp अर्डरले बिक्री ३०% बढ्यो।"},
+    {av:"बि",en:"Bikas Shrestha",np:"बिकास श्रेष्ठ",sEn:"Shrestha Medical, Kirtipur",sNp:"श्रेष्ठ मेडिकल, कीर्तिपुर",qEn:"Stock tracking stopped my losses completely.",qNp:"स्टक ट्र्याकिङले घाटा पूरै रोक्यो।"},
+  ];
+  const feats=[
+    {i:"📦",en:"Inventory Tracking",np:"स्टक ट्र्याकिङ"},
+    {i:"💳",en:"QR Payment",np:"QR भुक्तानी"},
+    {i:"🧾",en:"Digital Billing",np:"डिजिटल बिलिङ"},
+    {i:"📊",en:"Sales Reports",np:"बिक्री रिपोर्ट"},
+    {i:"👥",en:"Customer Database",np:"ग्राहक डेटाबेस"},
+    {i:"💬",en:"WhatsApp Orders",np:"WhatsApp अर्डर"},
+    {i:"🌐",en:"Online Catalog",np:"अनलाइन सूची"},
+    {i:"📍",en:"Google Maps",np:"गुगल म्याप्स"},
+    {i:"📱",en:"Social Media",np:"सोसल मिडिया"},
+  ];
+  return(
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"'Segoe UI','Noto Sans Devanagari',sans-serif",color:C.text}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 32px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,background:C.bg+"f0",backdropFilter:"blur(12px)",zIndex:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>⬡</div>
+          <div style={{fontWeight:900,fontSize:20,letterSpacing:-0.5}}>ShopOS</div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",overflow:"hidden"}}>
+            {["en","np"].map(l=><button key={l} onClick={()=>setLang(l)} style={{background:lang===l?C.accent:"transparent",color:lang===l?"#000":C.muted,border:"none",padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>{l==="en"?"English":"नेपाली"}</button>)}
+          </div>
+          <Btn onClick={onLogin} variant="ghost" style={{fontSize:12,padding:"7px 16px"}}>{t.login}</Btn>
+          <Btn onClick={onSignup} style={{fontSize:12,padding:"7px 16px"}}>{lang==="en"?"Free Trial":"नि:शुल्क ट्रायल"}</Btn>
+        </div>
+      </div>
+      <div style={{textAlign:"center",padding:"72px 20px 52px",maxWidth:760,margin:"0 auto"}}>
+        <div style={{display:"inline-flex",gap:8,alignItems:"center",background:`${C.accent}12`,border:`1px solid ${C.accent}35`,borderRadius:20,padding:"6px 18px",fontSize:12,color:C.accent,fontWeight:700,marginBottom:22}}>
+          🇳🇵 {lang==="en"?"Built for Nepali shops":"नेपाली पसलहरूको लागि"}
+        </div>
+        <h1 style={{fontSize:50,fontWeight:900,margin:"0 0 22px",lineHeight:1.1,background:`linear-gradient(135deg,${C.text} 30%,${C.accent})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{t.heroTitle}</h1>
+        <p style={{color:C.muted,fontSize:17,lineHeight:1.75,margin:"0 0 36px",maxWidth:560,marginLeft:"auto",marginRight:"auto"}}>{t.heroSub}</p>
+        <div style={{display:"flex",gap:14,justifyContent:"center",flexWrap:"wrap"}}>
+          <Btn onClick={onSignup} style={{fontSize:15,padding:"13px 32px"}}>{t.getStarted}</Btn>
+          <Btn onClick={onDemo} variant="ghost" style={{fontSize:15,padding:"13px 32px"}}>🎬 {lang==="en"?"Live Demo":"लाइभ डेमो"}</Btn>
+        </div>
+        <div style={{marginTop:14,color:C.muted,fontSize:12,display:"flex",gap:18,justifyContent:"center",flexWrap:"wrap"}}>
+          <span>✓ {lang==="en"?"14-day free trial":"१४ दिन नि:शुल्क"}</span>
+          <span>✓ {lang==="en"?"No credit card":"कार्ड आवश्यक छैन"}</span>
+          <span>✓ {lang==="en"?"Cancel anytime":"जुनसुकै बेला रोक्नुहोस्"}</span>
+        </div>
+      </div>
+      <div style={{padding:"0 32px 56px",maxWidth:1020,margin:"0 auto"}}>
+        <h2 style={{textAlign:"center",fontSize:28,fontWeight:900,margin:"0 0 32px"}}>{lang==="en"?"Everything Your Shop Needs":"तपाईंको पसललाई चाहिने सबै"}</h2>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:13}}>
+          {feats.map((f,i)=>(
+            <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",display:"flex",alignItems:"center",gap:13}}>
+              <div style={{fontSize:24,width:42,height:42,background:`${C.accent}15`,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{f.i}</div>
+              <div style={{fontWeight:700,fontSize:14}}>{lang==="en"?f.en:f.np}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:"0 32px 56px",maxWidth:940,margin:"0 auto"}}>
+        <h2 style={{textAlign:"center",fontSize:28,fontWeight:900,margin:"0 0 6px"}}>{t.pricingTitle}</h2>
+        <p style={{textAlign:"center",color:C.muted,margin:"0 0 22px"}}>{t.pricingFor}</p>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:28}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,display:"flex",padding:3,overflow:"hidden"}}>
+            {["monthly","yearly"].map(b=><button key={b} onClick={()=>setBilling(b)} style={{background:billing===b?C.accent:"transparent",color:billing===b?"#000":C.muted,border:"none",padding:"7px 20px",cursor:"pointer",fontWeight:700,fontSize:12,fontFamily:"inherit",borderRadius:8}}>{lang==="en"?(b==="monthly"?"Monthly":"Yearly (save 20%)"):(b==="monthly"?"मासिक":"वार्षिक (२०% बचत)")}</button>)}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+          {plans.map((pl,i)=>{
+            const price=billing==="monthly"?pl.mo:pl.yr;
+            return(
+              <div key={i} style={{background:pl.hi?`linear-gradient(180deg,${C.accent}15,${C.purple}15)`:C.card,border:`2px solid ${pl.hi?C.accent:C.border}`,borderRadius:18,padding:26,position:"relative"}}>
+                {pl.hi&&<div style={{position:"absolute",top:-1,left:"50%",transform:"translateX(-50%)",background:`linear-gradient(90deg,${C.accent},${C.purple})`,color:"#fff",fontSize:10,fontWeight:800,padding:"5px 16px",borderRadius:"0 0 12px 12px"}}>⭐ {lang==="en"?"MOST POPULAR":"सबैभन्दा लोकप्रिय"}</div>}
+                <div style={{fontWeight:900,fontSize:18,marginTop:pl.hi?14:0,marginBottom:6}}>{lang==="en"?pl.en:pl.np}</div>
+                <div style={{marginBottom:18}}><span style={{fontWeight:900,fontSize:34,color:pl.hi?C.accent:C.text}}>रू {price}</span><span style={{fontSize:13,color:C.muted}}>{t.perMonth}</span></div>
+                {(lang==="en"?pl.fEn:pl.fNp).map((f,j)=><div key={j} style={{display:"flex",gap:9,marginBottom:10,fontSize:13,color:C.muted}}><span style={{color:C.green}}>✓</span>{f}</div>)}
+                <Btn onClick={onSignup} variant={pl.hi?"primary":"ghost"} style={{width:"100%",marginTop:20,padding:"11px"}}>{t.startTrial}</Btn>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{padding:"0 32px 56px",maxWidth:1000,margin:"0 auto"}}>
+        <h2 style={{textAlign:"center",fontSize:28,fontWeight:900,margin:"0 0 32px"}}>{lang==="en"?"Real Shops. Real Results.":"वास्तविक पसल। वास्तविक परिणाम।"}</h2>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+          {tms.map((tm,i)=>(
+            <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:24}}>
+              <div style={{color:C.accent,fontSize:22,marginBottom:12}}>❝</div>
+              <p style={{fontSize:13,lineHeight:1.7,color:C.muted,margin:"0 0 18px"}}>{lang==="en"?tm.qEn:tm.qNp}</p>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13}}>{tm.av}</div>
+                <div><div style={{fontWeight:700,fontSize:13}}>{lang==="en"?tm.en:tm.np}</div><div style={{color:C.muted,fontSize:11}}>{lang==="en"?tm.sEn:tm.sNp}</div></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{textAlign:"center",padding:"48px 32px 64px",borderTop:`1px solid ${C.border}`}}>
+        <h2 style={{fontSize:30,fontWeight:900,margin:"0 0 14px"}}>{lang==="en"?"Ready to grow your shop?":"तपाईंको पसल बढाउन तयार?"}</h2>
+        <p style={{color:C.muted,marginBottom:28}}>{lang==="en"?"Join hundreds of shops using ShopOS":"सयौं पसलहरूसँग सामेल हुनुहोस्"}</p>
+        <Btn onClick={onSignup} style={{fontSize:16,padding:"14px 40px"}}>{t.getStarted}</Btn>
+      </div>
+      <div style={{borderTop:`1px solid ${C.border}`,padding:"22px 32px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12,color:C.muted,fontSize:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:22,height:22,borderRadius:6,background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10}}>⬡</div>
+          <span style={{fontWeight:700,color:C.text}}>ShopOS</span> © 2026
+        </div>
+        <div style={{display:"flex",gap:20}}>
+          <span>{lang==="en"?"Made with ❤️ for Nepal":"नेपालको लागि ❤️"}</span>
+          <span>📞 +977-9800000000</span>
+          <span>✉ hello@shopos.com.np</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen({mode,onSuccess,onBack}){
+  const {lang}=useLang(); const t=T[lang];
+  const [form,setForm]=useState({email:"",password:"",shopName:"",phone:"",confirmPass:"",plan:"pro"});
+  const [loading,setLoading]=useState(false); const [step,setStep]=useState(1);
+  const isLogin=mode==="login"; const set=k=>e=>setForm({...form,[k]:e.target.value});
+  const handle=async()=>{
+    if(isLogin){setLoading(true);await new Promise(r=>setTimeout(r,700));
+      onSuccess({email:form.email,shopName:lang==="en"?"My Shop":"मेरो पसल",plan:"pro",trialDays:0});return;}
+    if(step===1){setStep(2);return;}
+    setLoading(true);await new Promise(r=>setTimeout(r,900));
+    onSuccess({email:form.email,shopName:form.shopName||"My Shop",phone:form.phone,plan:"trial",trialDays:14});
+  };
+  const plans=[
+    {k:"basic",l:lang==="en"?"Basic — रू 399/mo":"बेसिक — रू ३९९/महिना"},
+    {k:"pro",l:lang==="en"?"Pro — रू 799/mo ⭐":"प्रो — रू ७९९/महिना ⭐"},
+    {k:"ultimate",l:lang==="en"?"Ultimate — रू 1499/mo":"अल्टिमेट — रू १४९९/महिना"},
+  ];
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI','Noto Sans Devanagari',sans-serif",padding:20}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:22,padding:"36px 40px",width:"100%",maxWidth:420}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:26}}>
+          <div style={{width:32,height:32,borderRadius:9,background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>⬡</div>
+          <div style={{fontWeight:900,fontSize:17}}>ShopOS</div>
+        </div>
+        {!isLogin&&<div style={{display:"flex",gap:4,marginBottom:22}}>{[1,2].map(s=><div key={s} style={{flex:1,height:4,borderRadius:2,background:step>=s?C.accent:C.border}}/>)}</div>}
+        <h2 style={{margin:"0 0 5px",fontSize:22,fontWeight:900}}>
+          {isLogin?t.login:step===1?(lang==="en"?"Create your account":"खाता बनाउनुहोस्"):(lang==="en"?"Choose your plan":"योजना छान्नुहोस्")}
+        </h2>
+        <p style={{margin:"0 0 22px",color:C.muted,fontSize:13}}>
+          {isLogin?(lang==="en"?"Welcome back":"स्वागत छ"):step===1?(lang==="en"?"14-day free trial, no card needed":"१४ दिन नि:शुल्क ट्रायल"):(lang==="en"?"Change anytime":"पछि परिवर्तन गर्न सकिन्छ")}
+        </p>
+        <div style={{display:"flex",flexDirection:"column",gap:11}}>
+          {(isLogin||step===1)&&<>
+            {!isLogin&&<><Input value={form.shopName} onChange={set("shopName")} placeholder={t.shopName}/><Input value={form.phone} onChange={set("phone")} placeholder={t.phone}/></>}
+            <Input value={form.email} onChange={set("email")} placeholder={t.email} type="email"/>
+            <Input value={form.password} onChange={set("password")} placeholder={t.password} type="password"/>
+            {!isLogin&&<Input value={form.confirmPass} onChange={set("confirmPass")} placeholder={t.confirmPass} type="password"/>}
+          </>}
+          {!isLogin&&step===2&&<div style={{display:"flex",flexDirection:"column",gap:9}}>
+            {plans.map(p=><div key={p.k} onClick={()=>setForm({...form,plan:p.k})} style={{padding:"13px 16px",borderRadius:10,border:`2px solid ${form.plan===p.k?C.accent:C.border}`,cursor:"pointer",background:form.plan===p.k?`${C.accent}12`:C.surface,fontSize:13,fontWeight:form.plan===p.k?700:500,color:form.plan===p.k?C.accent:C.text}}>{p.l}</div>)}
+            <div style={{color:C.muted,fontSize:11,textAlign:"center"}}>{lang==="en"?"All include 14-day free trial":"सबैमा १४ दिन नि:शुल्क"}</div>
+          </div>}
+          <Btn onClick={handle} style={{width:"100%",padding:"12px",fontSize:14,marginTop:6,opacity:loading?0.7:1}}>
+            {loading?(lang==="en"?"Please wait...":"पर्खनुहोस्..."):isLogin?t.loginBtn:step===1?(lang==="en"?"Continue →":"जारी राख्नुहोस् →"):t.signupBtn}
+          </Btn>
+        </div>
+        <div style={{marginTop:18,textAlign:"center"}}>
+          <button onClick={onBack} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>← {lang==="en"?"Back":"फिर्ता"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpgradeModal({onClose,onUpgrade}){
+  const {lang}=useLang();
+  const plans=[
+    {k:"basic",en:"Basic",np:"बेसिक",price:399,fEn:["Inventory","Billing","QR Pay","Basic reports"],fNp:["स्टक","बिलिङ","QR भुक्तानी","रिपोर्ट"]},
+    {k:"pro",en:"Pro",np:"प्रो",price:799,hi:true,fEn:["All Basic +","Customers","WhatsApp","Advanced reports"],fNp:["बेसिक सबै +","ग्राहक","WhatsApp","विस्तृत रिपोर्ट"]},
+    {k:"ultimate",en:"Ultimate",np:"अल्टिमेट",price:1499,fEn:["All Pro +","Catalog","Maps","Social"],fNp:["प्रो सबै +","सूची","म्याप्स","सोसल"]},
+  ];
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000b",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:22,padding:"30px 26px",width:"100%",maxWidth:680}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+          <div>
+            <h2 style={{margin:0,fontSize:20,fontWeight:900}}>{lang==="en"?"Choose Your Plan":"योजना छान्नुहोस्"}</h2>
+            <p style={{margin:"4px 0 0",color:C.muted,fontSize:12}}>{lang==="en"?"All plans include 14-day free trial":"सबैमा १४ दिन नि:शुल्क ट्रायल"}</p>
+          </div>
+          <button onClick={onClose} style={{background:C.surface,border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontFamily:"inherit",fontSize:14}}>✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:13}}>
+          {plans.map((pl,i)=>(
+            <div key={i} style={{background:pl.hi?`${C.accent}12`:C.surface,border:`2px solid ${pl.hi?C.accent:C.border}`,borderRadius:14,padding:20,position:"relative"}}>
+              {pl.hi&&<div style={{position:"absolute",top:-1,left:"50%",transform:"translateX(-50%)",background:`linear-gradient(90deg,${C.accent},${C.purple})`,fontSize:9,fontWeight:800,color:"#fff",padding:"4px 12px",borderRadius:"0 0 10px 10px"}}>⭐ {lang==="en"?"POPULAR":"लोकप्रिय"}</div>}
+              <div style={{fontWeight:900,fontSize:15,marginTop:pl.hi?12:0}}>{lang==="en"?pl.en:pl.np}</div>
+              <div style={{fontSize:26,fontWeight:900,color:pl.hi?C.accent:C.text,margin:"8px 0 13px"}}>रू{pl.price}<span style={{fontSize:11,color:C.muted}}>/mo</span></div>
+              {(lang==="en"?pl.fEn:pl.fNp).map((f,j)=><div key={j} style={{display:"flex",gap:7,marginBottom:8,fontSize:12,color:C.muted}}><span style={{color:C.green}}>✓</span>{f}</div>)}
+              <Btn onClick={()=>onUpgrade(pl.k)} variant={pl.hi?"primary":"ghost"} style={{width:"100%",marginTop:14,fontSize:12}}>{lang==="en"?"Select":"छान्नुहोस्"}</Btn>
+            </div>
+          ))}
+        </div>
+        <div style={{textAlign:"center",color:C.muted,fontSize:11,marginTop:16}}>
+          {lang==="en"?"Pay via eSewa · Khalti · FonePay · Bank Transfer":"eSewa · Khalti · FonePay · बैंक ट्रान्सफर"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const maxS=Math.max(...SALES.map(d=>d.sales));
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:20}}>
+        <h1 style={{fontSize:24,fontWeight:900,margin:0}}>{t.goodMorning} {user?.shopName||t.shopOwner}</h1>
+        <p style={{color:C.muted,marginTop:4,fontSize:13}}>{t.todaySummary}</p>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:13,marginBottom:18}}>
+        <Stat label={t.todaySales} value="रू ९,१४०" change={lang==="en"?"↑ 12% vs yesterday":"↑ हिजोभन्दा १२% बढी"} color={C.green} icon="💰"/>
+        <Stat label={t.ordersLabel} value="३४" change={lang==="en"?"5 new today":"आज ५ नयाँ"} color={C.accent} icon="🛒"/>
+        <Stat label={t.lowStock} value="३" change={lang==="en"?"Needs restock":"पुनःस्टक गर्नुहोस्"} color={C.orange} icon="⚠️"/>
+        <Stat label={t.pendingInvoices} value="रू २,७८०" change={lang==="en"?"2 overdue":"२ म्याद गुज्रेको"} color={C.red} icon="🧾"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,marginBottom:4}}>{t.weeklySales}</div>
+          <div style={{color:C.muted,fontSize:12,marginBottom:14}}>{lang==="en"?"Total: रू 42,300":"जम्मा: रू ४२,३००"}</div>
+          <div style={{display:"flex",alignItems:"flex-end",gap:5,height:72}}>
+            {SALES.map((d,i)=>(
+              <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <div style={{width:"100%",height:`${(d.sales/maxS)*62}px`,background:`linear-gradient(180deg,${C.accent},${C.purple})`,borderRadius:"3px 3px 0 0",minHeight:3}}/>
+                <div style={{color:C.muted,fontSize:9}}>{lang==="en"?d.dayEn:d.dayNp}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,marginBottom:14}}>{t.topSelling}</div>
+          {[{np:"बासमती चामल",en:"Basmati Rice 5kg",q:8,r:"रू ६,८००"},{np:"सूर्यमुखी तेल",en:"Sunflower Oil 1L",q:12,r:"रू २,१६०"},{np:"कोका–कोला",en:"Coca-Cola 1.5L",q:18,r:"रू १,७१०"}].map((p,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+              <div><div style={{fontSize:13,fontWeight:600}}>{lang==="en"?p.en:p.np}</div><div style={{color:C.muted,fontSize:11}}>{p.q} {t.unitsSold}</div></div>
+              <div style={{color:C.green,fontWeight:800,fontSize:14}}>{p.r}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+        <div style={{fontWeight:700,marginBottom:12}}>{t.quickActions}</div>
+        <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+          {[t.newInvoice,t.addProduct,t.viewReport,t.showQR,"💬 WhatsApp"].map(a=><Btn key={a} variant="ghost" style={{fontSize:12,padding:"7px 14px"}}>{a}</Btn>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Inventory({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [products,setProducts]=useState(PRODUCTS);
+  const [search,setSearch]=useState(""); const [showAdd,setShowAdd]=useState(false);
+  const [form,setForm]=useState({name:"",sku:"",category:"",price:"",stock:"",low:""});
+  const filtered=products.filter(p=>(lang==="en"?p.nameEn:p.name).toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase()));
+  const add=()=>{
+    if(!form.name)return;
+    setProducts([...products,{...form,id:Date.now(),nameEn:form.name,price:+form.price,stock:+form.stock,low:+form.low,categoryEn:form.category}]);
+    setForm({name:"",sku:"",category:"",price:"",stock:"",low:""});setShowAdd(false);
+  };
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <h2 style={{margin:0,fontSize:22,fontWeight:900}}>📦 {t.inventoryTitle}</h2>
+          <p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{products.length} {lang==="en"?"products":"सामान"} · {products.filter(p=>p.stock<=p.low).length} {t.lowStockItems}</p>
+        </div>
+        <Btn onClick={()=>setShowAdd(!showAdd)}>{t.addProductBtn}</Btn>
+      </div>
+      {showAdd&&(
+        <div style={{background:C.card,border:`1px solid ${C.accent}40`,borderRadius:14,padding:18,marginBottom:16}}>
+          <div style={{fontWeight:700,marginBottom:12}}>{lang==="en"?"New Product":"नयाँ सामान"}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            {[[t.productName,"name"],[t.skuCode,"sku"],[t.category,"category"],[t.price,"price"],[t.stockQty,"stock"],[t.lowStockAlert,"low"]].map(([l,k])=>(
+              <div key={k}><div style={{color:C.muted,fontSize:11,marginBottom:4}}>{l}</div><Input value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})}/></div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:9,marginTop:12}}><Btn onClick={add} variant="green">{t.save}</Btn><Btn onClick={()=>setShowAdd(false)} variant="ghost">{t.cancel}</Btn></div>
+        </div>
+      )}
+      <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.searchProduct} style={{marginBottom:13}}/>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"10px 18px",borderBottom:`1px solid ${C.border}`}}>
+          {[t.product,t.category,t.price,t.stock,t.status].map(h=><div key={h} style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase"}}>{h}</div>)}
+        </div>
+        {filtered.map((p,i)=>(
+          <div key={p.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"12px 18px",borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",background:p.stock<=p.low?"#ff6d000a":"transparent"}}>
+            <div><div style={{fontWeight:600,fontSize:13}}>{lang==="en"?p.nameEn:p.name}</div><div style={{color:C.muted,fontSize:10}}>{p.sku}</div></div>
+            <div style={{color:C.muted,fontSize:13,display:"flex",alignItems:"center"}}>{lang==="en"?p.categoryEn:p.category}</div>
+            <div style={{fontSize:13,fontWeight:700,display:"flex",alignItems:"center"}}>रू{p.price}</div>
+            <div style={{color:p.stock<=p.low?C.orange:C.text,fontSize:13,fontWeight:700,display:"flex",alignItems:"center"}}>{p.stock}</div>
+            <div style={{display:"flex",alignItems:"center"}}><Badge status={p.stock<=p.low?"low":"ok"}/></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Billing({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [invoices,setInvoices]=useState(INVOICES_DATA);
+  const [cart,setCart]=useState([]); const [customer,setCustomer]=useState(""); const [showNew,setShowNew]=useState(false);
+  const addItem=p=>{const ex=cart.find(c=>c.id===p.id);setCart(ex?cart.map(c=>c.id===p.id?{...c,qty:c.qty+1}:c):[...cart,{...p,qty:1}]);};
+  const total=cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const create=()=>{
+    if(!cart.length)return;
+    setInvoices([{id:`INV-00${invoices.length+1}`,customerNp:customer||"गेस्ट ग्राहक",customerEn:customer||"Walk-in",amount:total,status:"pending",date:lang==="en"?"Jun 11":"असार ८"},...invoices]);
+    setCart([]);setCustomer("");setShowNew(false);
+  };
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div><h2 style={{margin:0,fontSize:22,fontWeight:900}}>🧾 {t.billingTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.billingSubtitle}</p></div>
+        <Btn onClick={()=>setShowNew(!showNew)}>{lang==="en"?"+ New Invoice":"+ नयाँ बिल"}</Btn>
+      </div>
+      {showNew&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:13,marginBottom:16}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+            <div style={{fontWeight:700,marginBottom:11}}>{t.selectProducts}</div>
+            <Input value={customer} onChange={e=>setCustomer(e.target.value)} placeholder={t.customerName} style={{marginBottom:9}}/>
+            {PRODUCTS.map(p=>(
+              <div key={p.id} onClick={()=>addItem(p)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 13px",borderRadius:8,marginBottom:5,background:C.surface,cursor:"pointer",border:`1px solid ${C.border}`}}>
+                <span style={{fontSize:13}}>{lang==="en"?p.nameEn:p.name}</span>
+                <span style={{color:C.accent,fontWeight:700,fontSize:13}}>रू{p.price} +</span>
+              </div>
+            ))}
+          </div>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+            <div style={{fontWeight:700,marginBottom:11}}>{t.cart}</div>
+            {cart.length===0&&<p style={{color:C.muted,fontSize:13}}>{t.noItems}</p>}
+            {cart.map(c=>(
+              <div key={c.id} style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:12}}>{lang==="en"?c.nameEn:c.name} ×{c.qty}</span>
+                <span style={{color:C.green,fontSize:12,fontWeight:700}}>रू{c.price*c.qty}</span>
+              </div>
+            ))}
+            {cart.length>0&&<><div style={{borderTop:`1px solid ${C.border}`,marginTop:10,paddingTop:10,display:"flex",justifyContent:"space-between",fontWeight:800}}><span>{t.total}</span><span style={{color:C.green}}>रू{total}</span></div><Btn onClick={create} variant="green" style={{width:"100%",marginTop:12}}>{t.createInvoice}</Btn></>}
+          </div>
+        </div>
+      )}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 2fr 1fr 1fr 1fr",padding:"10px 18px",borderBottom:`1px solid ${C.border}`}}>
+          {[t.invoiceNo,t.customer,t.amount,t.date,t.status].map(h=><div key={h} style={{color:C.muted,fontSize:10,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase"}}>{h}</div>)}
+        </div>
+        {invoices.map((inv,i)=>(
+          <div key={inv.id} style={{display:"grid",gridTemplateColumns:"1fr 2fr 1fr 1fr 1fr",padding:"12px 18px",borderBottom:i<invoices.length-1?`1px solid ${C.border}`:"none",alignItems:"center"}}>
+            <div style={{fontWeight:700,fontSize:12,color:C.accent}}>{inv.id}</div>
+            <div style={{fontSize:13}}>{lang==="en"?inv.customerEn:inv.customerNp}</div>
+            <div style={{fontWeight:700,fontSize:13}}>रू{inv.amount}</div>
+            <div style={{color:C.muted,fontSize:12}}>{inv.date}</div>
+            <div><Badge status={inv.status}/></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QRPay({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [qrId,setQrId]=useState("9800000000"); const [amount,setAmount]=useState(""); const [note,setNote]=useState(""); const [shown,setShown]=useState(false);
+  const cells=19;
+  const qrGrid=shown?Array.from({length:cells*cells},(_,i)=>{
+    const r=Math.floor(i/cells),c_=i%cells;
+    const seed=(qrId+amount).split("").reduce((a,ch)=>a+ch.charCodeAt(0),42);
+    const isCorner=(r<6&&c_<6)||(r<6&&c_>=cells-6)||(r>=cells-6&&c_<6);
+    return isCorner||((r+c_+seed)%3===0)||((r*c_+seed)%5===0);
+  }):null;
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:18}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>💳 {t.qrTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.qrSubtitle}</p></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:16}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:22}}>
+          <div style={{fontWeight:700,marginBottom:16}}>{lang==="en"?"Generate QR":"QR बनाउनुहोस्"}</div>
+          {[[t.upiLabel,qrId,setQrId,"FonePay number"],[t.amountOptional,amount,setAmount,t.enterAmount],[t.noteLabel,note,setNote,"Invoice #001"]].map(([l,v,sv,ph],i)=>(
+            <div key={i} style={{marginBottom:12}}><div style={{color:C.muted,fontSize:11,marginBottom:5}}>{l}</div><Input value={v} onChange={e=>sv(e.target.value)} placeholder={ph}/></div>
+          ))}
+          <Btn onClick={()=>{if(qrId)setShown(true);}} style={{width:"100%"}}>{t.generateBtn}</Btn>
+          <div style={{marginTop:16,padding:14,background:C.surface,borderRadius:10}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:8,fontWeight:700}}>{lang==="en"?"Supported payment apps:":"सपोर्टेड ऐप्स:"}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {["eSewa","Khalti","FonePay","IME Pay","ConnectIPS"].map(a=><span key={a} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:600}}>{a}</span>)}
+            </div>
+          </div>
+        </div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:22,display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <div style={{fontWeight:700,marginBottom:18}}>{t.paymentQR}</div>
+          {!shown&&<div style={{width:170,height:170,background:C.surface,border:`2px dashed ${C.border}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:12,textAlign:"center",padding:18}}>{lang==="en"?"QR will appear here":"QR यहाँ देखिनेछ"}</div>}
+          {shown&&<div style={{background:"#fff",padding:12,borderRadius:10}}>
+            <div style={{display:"grid",gridTemplateColumns:`repeat(${cells},8px)`,gap:1}}>
+              {qrGrid.map((filled,i)=><div key={i} style={{width:8,height:8,background:filled?"#000":"#fff",borderRadius:filled?1:0}}/>)}
+            </div>
+          </div>}
+          {shown&&amount&&<div style={{marginTop:14,fontWeight:800,fontSize:18,color:C.green}}>रू {amount}</div>}
+          {shown&&<div style={{marginTop:6,color:C.muted,fontSize:11,textAlign:"center"}}>{t.scanHint}</div>}
+          {shown&&<div style={{display:"flex",gap:9,marginTop:14}}>
+            <Btn variant="ghost" style={{fontSize:11,padding:"7px 14px"}}>{t.shareBtn}</Btn>
+            <Btn variant="ghost" style={{fontSize:11,padding:"7px 14px"}}>{t.printBtn}</Btn>
+          </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Reports({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const ts=SALES.reduce((s,d)=>s+d.sales,0); const tp=SALES.reduce((s,d)=>s+d.profit,0);
+  const maxS=Math.max(...SALES.map(d=>d.sales));
+  const cats=[{np:"किराना",en:"Grocery",pct:45,color:C.accent},{np:"पेय",en:"Beverages",pct:22,color:C.purple},{np:"दुग्ध",en:"Dairy",pct:18,color:C.green},{np:"सफाई",en:"Cleaning",pct:15,color:C.orange}];
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div><h2 style={{margin:0,fontSize:22,fontWeight:900}}>📊 {t.reportsTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.reportsSubtitle}</p></div>
+        <Btn variant="ghost">{t.exportReports} ↓</Btn>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:13,marginBottom:16}}>
+        <Stat label={t.weeklySalesLabel} value={`रू ${(ts/1000).toFixed(0)}K`} color={C.accent} icon="📈"/>
+        <Stat label={t.weeklyProfit} value={`रू ${(tp/1000).toFixed(0)}K`} color={C.green} icon="💹"/>
+        <Stat label={t.dailyAvg} value={`रू ${Math.round(ts/7).toLocaleString()}`} color={C.purple} icon="📅"/>
+        <Stat label={t.profitMargin} value={`${Math.round((tp/ts)*100)}%`} color={C.yellow} icon="🎯"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,marginBottom:16}}>{t.dailyBreakdown}</div>
+          {SALES.map((d,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+              <div style={{width:30,color:C.muted,fontSize:12}}>{lang==="en"?d.dayEn:d.dayNp}</div>
+              <div style={{flex:1,height:8,background:C.surface,borderRadius:4,overflow:"hidden"}}><div style={{width:`${(d.sales/maxS)*100}%`,height:"100%",background:`linear-gradient(90deg,${C.accent},${C.purple})`,borderRadius:4}}/></div>
+              <div style={{width:72,textAlign:"right",fontWeight:700,fontSize:12}}>रू{(d.sales/1000).toFixed(1)}K</div>
+              <div style={{width:52,textAlign:"right",color:C.green,fontSize:11}}>+{(d.profit/1000).toFixed(1)}K</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,marginBottom:16}}>{t.salesByCategory}</div>
+          {cats.map((c,i)=>(
+            <div key={i} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:13}}>{lang==="en"?c.en:c.np}</span><span style={{color:c.color,fontWeight:700,fontSize:13}}>{c.pct}%</span></div>
+              <div style={{height:8,background:C.surface,borderRadius:4,overflow:"hidden"}}><div style={{width:`${c.pct}%`,height:"100%",background:c.color,borderRadius:4}}/></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Customers({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [customers]=useState(CUSTOMERS_DATA); const [search,setSearch]=useState(""); const [selected,setSelected]=useState(null);
+  const filtered=customers.filter(c=>(lang==="en"?c.nameEn:c.name).toLowerCase().includes(search.toLowerCase())||c.phone.includes(search));
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:16}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>👥 {t.customersTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{customers.length} {t.customersRegistered}</p></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:13,marginBottom:16}}>
+        <Stat label={t.totalCustomers} value={customers.length} color={C.accent} icon="👥"/>
+        <Stat label={t.returning} value={customers.filter(c=>c.orders>5).length} color={C.green} icon="🔄"/>
+        <Stat label={t.avgSpend} value={`रू ${Math.round(customers.reduce((s,c)=>s+c.spent,0)/customers.length).toLocaleString()}`} color={C.purple} icon="💰"/>
+      </div>
+      <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.searchCustomers} style={{marginBottom:13}}/>
+      <div style={{display:"grid",gridTemplateColumns:selected?"1fr 300px":"1fr",gap:14}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+          {filtered.map((c,i)=>(
+            <div key={c.id} onClick={()=>setSelected(selected?.id===c.id?null:c)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 18px",borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",background:selected?.id===c.id?`${C.accent}10`:"transparent"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:13}}>{(lang==="en"?c.nameEn:c.name)[0]}</div>
+                <div><div style={{fontWeight:600,fontSize:13}}>{lang==="en"?c.nameEn:c.name}</div><div style={{color:C.muted,fontSize:11}}>{c.phone}</div></div>
+              </div>
+              <div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:13,color:C.green}}>रू{c.spent.toLocaleString()}</div><div style={{color:C.muted,fontSize:11}}>{c.orders} {lang==="en"?"orders":"अर्डर"}</div></div>
+            </div>
+          ))}
+        </div>
+        {selected&&(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+            <div style={{fontWeight:700,marginBottom:14}}>{t.customerProfile}</div>
+            <div style={{width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:20,marginBottom:12}}>{(lang==="en"?selected.nameEn:selected.name)[0]}</div>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:3}}>{lang==="en"?selected.nameEn:selected.name}</div>
+            <div style={{color:C.muted,fontSize:12,marginBottom:16}}>{selected.phone}</div>
+            {[[t.totalOrders,selected.orders],[t.totalSpent,`रू${selected.spent.toLocaleString()}`],[t.lastVisit,lang==="en"?selected.lastVisitEn:selected.lastVisit]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}><span style={{color:C.muted}}>{l}</span><span style={{fontWeight:700}}>{v}</span></div>
+            ))}
+            <div style={{display:"flex",gap:9,marginTop:14}}><Btn variant="wa" style={{flex:1,fontSize:11}}>{t.whatsappBtn}</Btn><Btn variant="ghost" style={{flex:1,fontSize:11}}>{t.invoiceBtn}</Btn></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WhatsApp({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [orders,setOrders]=useState(WA_ORDERS); const [active,setActive]=useState(orders[0]); const [reply,setReply]=useState(""); const [tab,setTab]=useState("new");
+  const tabs=[{k:"new",l:t.newOrders},{k:"replied",l:t.replied},{k:"fulfilled",l:t.fulfilled}];
+  const filtered=orders.filter(o=>o.status===tab);
+  const send=()=>{if(!reply||!active)return;setOrders(orders.map(o=>o.id===active.id?{...o,status:"replied"}:o));setReply("");};
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:16}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>💬 {t.waTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.waSubtitle}</p></div>
+      <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:14}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`}}>
+            {tabs.map(tb=><button key={tb.k} onClick={()=>setTab(tb.k)} style={{flex:1,background:tab===tb.k?C.surface:"transparent",border:"none",color:tab===tb.k?C.text:C.muted,padding:"10px 4px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>{tb.l}</button>)}
+          </div>
+          {filtered.length===0&&<div style={{padding:20,color:C.muted,fontSize:12,textAlign:"center"}}>{lang==="en"?"No orders":"कुनै अर्डर छैन"}</div>}
+          {filtered.map(o=>(
+            <div key={o.id} onClick={()=>setActive(o)} style={{padding:"12px 14px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:active?.id===o.id?`${C.accent}12`:"transparent"}}>
+              <div style={{fontWeight:600,fontSize:13}}>{lang==="en"?o.nameEn:o.nameNp}</div>
+              <div style={{color:C.muted,fontSize:11,marginTop:2}}>{lang==="en"?o.msgEn:o.msgNp}</div>
+              <div style={{color:C.muted,fontSize:10,marginTop:4}}>{o.time}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,display:"flex",flexDirection:"column"}}>
+          {active?(
+            <>
+              <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:700}}>{lang==="en"?active.nameEn:active.nameNp}</div><div style={{color:C.muted,fontSize:11}}>{active.phone}</div></div>
+                <Btn variant="wa" style={{fontSize:11,padding:"6px 14px"}}>{t.createInvoiceBtn}</Btn>
+              </div>
+              <div style={{flex:1,padding:18}}>
+                <div style={{background:C.surface,borderRadius:10,padding:"11px 14px",maxWidth:"80%",fontSize:13,lineHeight:1.6}}>{lang==="en"?active.msgEn:active.msgNp}</div>
+                <div style={{color:C.muted,fontSize:10,marginTop:5}}>{active.time}</div>
+              </div>
+              <div style={{padding:"12px 14px",borderTop:`1px solid ${C.border}`,display:"flex",gap:9}}>
+                <Input value={reply} onChange={e=>setReply(e.target.value)} placeholder={t.typeReply}/>
+                <Btn onClick={send} variant="wa" style={{flexShrink:0}}>{t.send}</Btn>
+              </div>
+            </>
+          ):<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:13}}>{lang==="en"?"Select an order":"अर्डर छान्नुहोस्"}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Catalog({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const slug=(user?.shopName||"my-shop").toLowerCase().replace(/\s+/g,"-");
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:16}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>🌐 {t.catalogTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.catalogSubtitle}</p></div>
+      <div style={{background:C.card,border:`1px solid ${C.accent}30`,borderRadius:14,padding:22,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+          <div><div style={{color:C.muted,fontSize:11,fontWeight:700,marginBottom:5}}>{t.storeLink}</div><div style={{fontWeight:700,fontSize:15,color:C.accent}}>shopos.com.np/{slug}</div></div>
+          <div style={{display:"flex",gap:9}}><Btn variant="ghost" style={{fontSize:12}}>{t.customize}</Btn><Btn style={{fontSize:12}}>{t.shareLink}</Btn></div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:13}}>
+        {PRODUCTS.map(p=>(
+          <div key={p.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+            <div style={{height:90,background:`linear-gradient(135deg,${C.accent}20,${C.purple}20)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32}}>🛍️</div>
+            <div style={{padding:14}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{lang==="en"?p.nameEn:p.name}</div>
+              <div style={{color:C.muted,fontSize:11,marginBottom:8}}>{lang==="en"?p.categoryEn:p.category}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:800,fontSize:15,color:C.green}}>रू{p.price}</span>
+                <Btn variant="wa" style={{fontSize:10,padding:"5px 10px"}}>{t.orderViaWA}</Btn>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GoogleMaps({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [form,setForm]=useState({name:user?.shopName||"",address:"",hours:""});
+  const stats=[{l:t.viewsMonth,v:"1,240",i:"👁️"},{l:t.searchesFound,v:"380",i:"🔍"},{l:t.directionsReq,v:"94",i:"🗺️"},{l:t.callsListing,v:"47",i:"📞"}];
+  const reviews=[{name:"Anil Joshi",r:5,txt:lang==="en"?"Fresh products, great prices!":"ताजा सामान, राम्रो मूल्य!"},{name:"Sita Rai",r:4,txt:lang==="en"?"Friendly staff, will visit again.":"राम्रो व्यवहार, फेरि आउनेछु।"},{name:"Mohan KC",r:5,txt:lang==="en"?"Best kirana in the area!":"यस क्षेत्रको सबैभन्दा राम्रो पसल!"}];
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:16}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>📍 {t.mapsTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.mapsSubtitle}</p></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+          <div style={{fontWeight:700,marginBottom:14}}>{t.businessProfile}</div>
+          {[[t.businessName,"name"],[t.address,"address"],[t.hours,"hours"]].map(([l,k])=>(
+            <div key={k} style={{marginBottom:11}}><div style={{color:C.muted,fontSize:11,marginBottom:4}}>{l}</div><Input value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={l}/></div>
+          ))}
+          <Btn style={{width:"100%",marginTop:6}}>{t.updateListing}</Btn>
+        </div>
+        <div>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20,marginBottom:13}}>
+            <div style={{fontWeight:700,marginBottom:14}}>{t.listingPerf}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {stats.map((s,i)=>(
+                <div key={i} style={{background:C.surface,borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:20,marginBottom:5}}>{s.i}</div>
+                  <div style={{fontWeight:800,fontSize:18}}>{s.v}</div>
+                  <div style={{color:C.muted,fontSize:10}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontWeight:700}}>{t.customerReviews}</div>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{color:C.gold}}>★</span><span style={{fontWeight:800}}>4.6</span><span style={{color:C.muted,fontSize:11}}> (3 {t.reviews})</span></div>
+            </div>
+            {reviews.map((r,i)=>(
+              <div key={i} style={{borderTop:i>0?`1px solid ${C.border}`:"none",paddingTop:i>0?10:0,marginTop:i>0?10:0}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600,fontSize:12}}>{r.name}</span><span style={{color:C.gold}}>{"★".repeat(r.r)}</span></div>
+                <div style={{color:C.muted,fontSize:11,marginTop:3}}>{r.txt}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SocialMedia({user,onUpgrade}){
+  const {lang}=useLang(); const t=T[lang];
+  const [caption,setCaption]=useState("");
+  const platforms=[{n:"Facebook",i:"📘",f:"1.2K"},{n:"Instagram",i:"📷",f:"840"},{n:"TikTok",i:"🎵",f:"2.1K"},{n:"Viber",i:"💜",f:"620"}];
+  const templates=[
+    {en:"Flash Sale! 🔥 20% off all groceries today only. Visit now!",np:"फ्ल्यास सेल! 🔥 आज मात्र सबै किराना सामानमा २०% छुट। अहिले नै आउनुहोस्!"},
+    {en:"New stock just arrived! 📦 Fresh milk, bread and more.",np:"नयाँ स्टक आयो! 📦 ताजा दूध, पाउरोटी र थप।"},
+    {en:"We're open 6AM–10PM daily. WhatsApp orders welcome! 💬",np:"हामी बिहान ६–रात १० खुला। WhatsApp अर्डर स्वागत! 💬"},
+    {en:"Thank you to our 500+ loyal customers! 🙏",np:"५०० भन्दा बढी नियमित ग्राहकहरूलाई धन्यवाद! 🙏"},
+  ];
+  return(
+    <div>
+      <TrialBanner user={user} onUpgrade={onUpgrade}/>
+      <div style={{marginBottom:16}}><h2 style={{margin:0,fontSize:22,fontWeight:900}}>📱 {t.socialTitle}</h2><p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{t.socialSubtitle}</p></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:11,marginBottom:14}}>
+        {platforms.map(p=>(
+          <div key={p.n} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:"center"}}>
+            <div style={{fontSize:26,marginBottom:6}}>{p.i}</div>
+            <div style={{fontWeight:700,fontSize:13}}>{p.n}</div>
+            <div style={{color:C.muted,fontSize:11,marginBottom:8}}>{p.f} {lang==="en"?"followers":"फलोअर"}</div>
+            <div style={{width:8,height:8,borderRadius:"50%",background:C.green,margin:"0 auto"}}/>
+          </div>
+        ))}
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18,marginBottom:13}}>
+        <div style={{fontWeight:700,marginBottom:12}}>{t.createPost}</div>
+        <textarea value={caption} onChange={e=>setCaption(e.target.value)} placeholder={t.writeCaption} rows={4}
+          style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,color:C.text,padding:"11px 13px",borderRadius:9,fontSize:13,resize:"vertical",boxSizing:"border-box",fontFamily:"'Segoe UI','Noto Sans Devanagari',sans-serif",outline:"none"}}/>
+        <div style={{display:"flex",gap:9,marginTop:10,flexWrap:"wrap"}}>
+          {[t.addImage,t.addOffer,t.schedule].map(a=><Btn key={a} variant="ghost" style={{fontSize:11,padding:"6px 13px"}}>{a}</Btn>)}
+          <Btn style={{marginLeft:"auto",background:"linear-gradient(135deg,#E1306C,#833AB4)",fontSize:12}}>{t.postAll}</Btn>
+        </div>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+        <div style={{fontWeight:700,marginBottom:12}}>{t.templates}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+          {templates.map((tm,i)=>(
+            <div key={i} onClick={()=>setCaption(lang==="en"?tm.en:tm.np)} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"11px 13px",cursor:"pointer"}}>
+              <div style={{color:C.muted,fontSize:11,lineHeight:1.5}}>{(lang==="en"?tm.en:tm.np).slice(0,65)}...</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SellerDashboard({onBack}){
+  const {lang}=useLang();
+  const [selPitch,setSelPitch]=useState(0);
+  const shops=[
+    {id:1,np:"महर्जन किराना",en:"Maharjan Kirana",owNp:"सुरेश",owEn:"Suresh",plan:"pro",status:"active",revenue:799,daysLeft:0,phone:"+977-98001-11111"},
+    {id:2,np:"थापा स्टोर",en:"Thapa General Store",owNp:"रीना",owEn:"Reena",plan:"ultimate",status:"active",revenue:1499,daysLeft:0,phone:"+977-98002-22222"},
+    {id:3,np:"श्रेष्ठ मेडिकल",en:"Shrestha Medical",owNp:"बिकास",owEn:"Bikas",plan:"basic",status:"trial",revenue:0,daysLeft:11,phone:"+977-98003-33333"},
+    {id:4,np:"नयाँ पसल",en:"Naya Pasal",owNp:"अञ्जली",owEn:"Anjali",plan:"pro",status:"trial",revenue:0,daysLeft:14,phone:"+977-98004-44444"},
+    {id:5,np:"गुरुङ स्टोर",en:"Gurung Store",owNp:"विष्णु",owEn:"Bishnu",plan:"pro",status:"expired",revenue:0,daysLeft:0,phone:"+977-98005-55555"},
+  ];
+  const active=shops.filter(s=>s.status==="active");
+  const trials=shops.filter(s=>s.status==="trial");
+  const mrr=active.reduce((s,sh)=>s+sh.revenue,0);
+  const potential=mrr+trials.reduce((s,sh)=>s+(sh.plan==="ultimate"?1499:sh.plan==="pro"?799:399),0);
+  const pitches=[
+    {titleEn:"WhatsApp Intro",titleNp:"WhatsApp परिचय",
+     textEn:"Namaste! 🙏 I'm offering ShopOS — a complete digital system for your shop.\n\n✅ Inventory tracking\n✅ Digital billing\n✅ QR payments (eSewa/Khalti)\n✅ WhatsApp orders\n✅ Online catalog\n\n14-day FREE trial. No setup fee.\nCall me or reply here to start!\nOnly रू 399–1499/month.",
+     textNp:"नमस्ते! 🙏 म तपाईंको पसलको लागि ShopOS — एक सम्पूर्ण डिजिटल प्रणाली ल्याएको छु।\n\n✅ स्टक ट्र्याकिङ\n✅ डिजिटल बिलिङ\n✅ QR भुक्तानी\n✅ WhatsApp अर्डर\n✅ अनलाइन सूची\n\n१४ दिन नि:शुल्क ट्रायल। कुनै शुल्क छैन।\nसुरु गर्न कल गर्नुहोस्!\nरू ३९९–१४९९/महिना मात्र।"},
+    {titleEn:"Follow-up (Day 3)",titleNp:"फलो-अप (दिन ३)",
+     textEn:"Hi! Just checking in on your ShopOS trial 😊\n\nHave you tried the QR payment feature yet? Your customers can pay instantly with eSewa/Khalti!\n\nAny questions? I'm here to help set it up.",
+     textNp:"नमस्ते! ShopOS ट्रायल कस्तो चलिरहेको छ? 😊\n\nके तपाईंले QR भुक्तानी सुविधा प्रयास गर्नुभयो? ग्राहकहरूले eSewa/Khalti बाट तुरुन्त तिर्न सक्छन्!\n\nकुनै प्रश्न छ? म मद्दत गर्न यहाँ छु।"},
+    {titleEn:"Trial Ending (Day 12)",titleNp:"ट्रायल समाप्त हुँदै (दिन १२)",
+     textEn:"Hi! Your ShopOS trial ends in 2 days.\n🔒 Your data will be locked after that.\n\nUpgrade today:\n• Pro Plan: रू 799/month\n• Pay via eSewa or Khalti\n\nReply YES and I'll send the payment link! 🙏",
+     textNp:"नमस्ते! तपाईंको ShopOS ट्रायल २ दिनमा समाप्त हुन्छ।\n🔒 त्यसपछि डेटा लक हुनेछ।\n\nआज अपग्रेड गर्नुहोस्:\n• प्रो योजना: रू ७९९/महिना\n• eSewa वा Khalti मार्फत भुक्तानी\n\nYES जवाफ दिनुहोस् र म भुक्तानी लिंक पठाउनेछु! 🙏"},
+    {titleEn:"Win-Back (Expired)",titleNp:"फिर्ता ल्याउने",
+     textEn:"Hi! We miss you on ShopOS 😔\n\nWe've added new features since you left:\n• Better billing & reports\n• WhatsApp order management\n\nCome back with 50% off your first month!\nLimited offer — reply to claim.",
+     textNp:"नमस्ते! ShopOS मा तपाईंलाई सम्झियौं 😔\n\nनयाँ सुविधाहरू थपेका छौं:\n• राम्रो बिलिङ र रिपोर्ट\n• WhatsApp अर्डर व्यवस्थापन\n\nपहिलो महिनामा ५०% छुटसहित फिर्ता आउनुहोस्!\nसीमित अफर — दाबी गर्न जवाफ दिनुहोस्।"},
+  ];
+  const checklist=[
+    {en:"Set up your contact number & eSewa",np:"आफ्नो नम्बर र eSewa सेट गर्नुहोस्",done:true},
+    {en:"Send first 5 WhatsApp pitches",np:"पहिलो ५ WhatsApp पिच पठाउनुहोस्",done:true},
+    {en:"Get 1st paying customer",np:"पहिलो भुक्तानी ग्राहक पाउनुहोस्",done:false},
+    {en:"Reach रू 5,000/month MRR",np:"रू ५,०००/महिना MRR पुग्नुहोस्",done:false},
+    {en:"Reach रू 20,000/month MRR",np:"रू २०,०००/महिना MRR पुग्नुहोस्",done:false},
+  ];
+  return(
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"'Segoe UI','Noto Sans Devanagari',sans-serif",color:C.text}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 28px",borderBottom:`1px solid ${C.border}`,background:C.surface}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:32,height:32,borderRadius:8,background:`linear-gradient(135deg,${C.gold},#d97706)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>👑</div>
+          <div>
+            <div style={{fontWeight:900,fontSize:16}}>ShopOS <span style={{color:C.gold}}>{lang==="en"?"Seller Panel":"विक्रेता प्यानल"}</span></div>
+            <div style={{color:C.muted,fontSize:10,fontWeight:700}}>{lang==="en"?"YOUR BUSINESS DASHBOARD":"तपाईंको व्यापार ड्यासबोर्ड"}</div>
+          </div>
+        </div>
+        <Btn onClick={onBack} variant="ghost" style={{fontSize:12}}>{lang==="en"?"← Back to App":"← ऐप मा फिर्ता"}</Btn>
+      </div>
+      <div style={{maxWidth:1100,margin:"0 auto",padding:"24px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:13,marginBottom:20}}>
+          <Stat label={lang==="en"?"Monthly Revenue":"मासिक आम्दानी"} value={`रू ${mrr.toLocaleString()}`} change={lang==="en"?"Active subscribers":"सक्रिय ग्राहकहरू"} color={C.green} icon="💰"/>
+          <Stat label={lang==="en"?"Active Shops":"सक्रिय पसलहरू"} value={active.length} change={lang==="en"?"Paying now":"भुक्तानी गर्दैछन्"} color={C.accent} icon="🏪"/>
+          <Stat label={lang==="en"?"In Trial":"ट्रायलमा"} value={trials.length} change={lang==="en"?"Convert before expiry":"म्याद अघि कन्भर्ट"} color={C.gold} icon="⏳"/>
+          <Stat label={lang==="en"?"Potential MRR":"सम्भावित आम्दानी"} value={`रू ${potential.toLocaleString()}`} change={lang==="en"?"If all trials convert":"सबै कन्भर्ट भए"} color={C.purple} icon="📈"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:16}}>
+          <div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:14}}>
+              <div style={{padding:"13px 18px",borderBottom:`1px solid ${C.border}`,fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>🏪 {lang==="en"?"All Shops":"सबै पसलहरू"} ({shops.length})</span>
+                <Btn variant="primary" style={{fontSize:11,padding:"5px 13px"}}>+ {lang==="en"?"Add Shop":"पसल थप्नुहोस्"}</Btn>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"9px 18px",borderBottom:`1px solid ${C.border}`}}>
+                {[lang==="en"?"Shop":"पसल",lang==="en"?"Plan":"योजना",lang==="en"?"Status":"स्थिति",lang==="en"?"Revenue":"आम्दानी",lang==="en"?"Action":"कार्य"].map(h=><div key={h} style={{color:C.muted,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.6}}>{h}</div>)}
+              </div>
+              {shops.map((sh,i)=>(
+                <div key={sh.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"12px 18px",borderBottom:i<shops.length-1?`1px solid ${C.border}`:"none",alignItems:"center"}}>
+                  <div><div style={{fontWeight:600,fontSize:13}}>{lang==="en"?sh.en:sh.np}</div><div style={{color:C.muted,fontSize:11}}>{lang==="en"?sh.owEn:sh.owNp} · {sh.phone}</div></div>
+                  <div style={{fontSize:12,fontWeight:700,color:sh.plan==="ultimate"?C.purple:sh.plan==="pro"?C.accent:C.muted,textTransform:"uppercase"}}>{sh.plan}</div>
+                  <div><Badge status={sh.status}/></div>
+                  <div style={{fontWeight:700,fontSize:13,color:sh.revenue>0?C.green:C.muted}}>
+                    {sh.revenue>0?`रू${sh.revenue}`:(sh.daysLeft>0?(lang==="en"?`${sh.daysLeft}d left`:`${sh.daysLeft} दिन`):lang==="en"?"Expired":"समाप्त")}
+                  </div>
+                  <div>
+                    <a href={`https://wa.me/${sh.phone.replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer"
+                      style={{background:"#25D366",color:"#fff",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"none"}}>💬 WA</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+              <div style={{fontWeight:700,marginBottom:14}}>💹 {lang==="en"?"Revenue Breakdown":"आम्दानी विवरण"}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:13}}>
+                {[{lEn:"Basic (रू399)",lNp:"बेसिक (रू३९९)",cnt:active.filter(s=>s.plan==="basic").length,c:C.muted},{lEn:"Pro (रू799)",lNp:"प्रो (रू७९९)",cnt:active.filter(s=>s.plan==="pro").length,c:C.accent},{lEn:"Ultimate (रू1499)",lNp:"अल्टिमेट (रू१४९९)",cnt:active.filter(s=>s.plan==="ultimate").length,c:C.purple}].map((r,i)=>(
+                  <div key={i} style={{background:C.surface,borderRadius:10,padding:"12px 14px",textAlign:"center"}}>
+                    <div style={{fontSize:28,fontWeight:900,color:r.c}}>{r.cnt}</div>
+                    <div style={{color:C.muted,fontSize:11,marginTop:3}}>{lang==="en"?r.lEn:r.lNp}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{padding:"12px 16px",background:`${C.green}15`,border:`1px solid ${C.green}30`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontWeight:700}}>💰 {lang==="en"?"Monthly Revenue":"मासिक आम्दानी"}</span>
+                <span style={{fontWeight:900,fontSize:20,color:C.green}}>रू {mrr.toLocaleString()}</span>
+              </div>
+              <div style={{padding:"12px 16px",background:`${C.gold}12`,border:`1px solid ${C.gold}30`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:700}}>📈 {lang==="en"?"Annual Projection":"वार्षिक अनुमान"}</span>
+                <span style={{fontWeight:900,fontSize:20,color:C.gold}}>रू {(mrr*12).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:13}}>
+              <div style={{padding:"13px 18px",borderBottom:`1px solid ${C.border}`,fontWeight:700}}>
+                💬 {lang==="en"?"Sales Message Templates":"बिक्री सन्देश टेम्प्लेट"}
+              </div>
+              {pitches.map((p,i)=>(
+                <div key={i} onClick={()=>setSelPitch(i)} style={{padding:"11px 16px",cursor:"pointer",background:selPitch===i?`${C.accent}12`:C.surface,borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontWeight:700,fontSize:13,color:selPitch===i?C.accent:C.text}}>{lang==="en"?p.titleEn:p.titleNp}</div>
+                </div>
+              ))}
+              <div style={{padding:16}}>
+                <div style={{background:C.surface,borderRadius:10,padding:14,fontSize:12,lineHeight:1.8,color:C.muted,whiteSpace:"pre-wrap",maxHeight:200,overflowY:"auto",marginBottom:12}}>
+                  {lang==="en"?pitches[selPitch].textEn:pitches[selPitch].textNp}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <Btn variant="wa" style={{flex:1,fontSize:11}}>💬 {lang==="en"?"Send via WhatsApp":"WhatsApp मा पठाउनुहोस्"}</Btn>
+                  <Btn variant="ghost" style={{fontSize:11,padding:"9px 12px"}}>📋</Btn>
+                </div>
+              </div>
+            </div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+              <div style={{fontWeight:700,marginBottom:13}}>✅ {lang==="en"?"Seller Checklist":"विक्रेता चेकलिस्ट"}</div>
+              {checklist.map((item,i)=>(
+                <div key={i} style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
+                  <div style={{width:20,height:20,borderRadius:5,background:item.done?C.green:`${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0}}>{item.done?"✓":""}</div>
+                  <span style={{fontSize:12,color:item.done?C.text:C.muted,textDecoration:item.done?"line-through":"none"}}>{lang==="en"?item.en:item.np}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const NAV_ITEMS=[
+  {id:"dashboard",icon:"⬡",en:"Dashboard",np:"ड्यासबोर्ड"},
+  {id:"inventory",icon:"📦",en:"Inventory",np:"स्टक"},
+  {id:"billing",icon:"🧾",en:"Billing",np:"बिलिङ"},
+  {id:"payments",icon:"💳",en:"QR Pay",np:"QR भुक्तानी"},
+  {id:"reports",icon:"📊",en:"Reports",np:"रिपोर्ट"},
+  {id:"customers",icon:"👥",en:"Customers",np:"ग्राहक"},
+  {id:"whatsapp",icon:"💬",en:"WhatsApp",np:"WhatsApp"},
+  {id:"catalog",icon:"🌐",en:"Catalog",np:"सूची"},
+  {id:"maps",icon:"📍",en:"Maps",np:"म्याप्स"},
+  {id:"social",icon:"📱",en:"Social",np:"सोसल"},
+];
+const PAGE_MAP={dashboard:Dashboard,inventory:Inventory,billing:Billing,payments:QRPay,reports:Reports,customers:Customers,whatsapp:WhatsApp,catalog:Catalog,maps:GoogleMaps,social:SocialMedia};
+
+function App({user,onLogout,onSeller}){
+  const {lang,setLang}=useLang();
+  const [page,setPage]=useState("dashboard");
+  const [collapsed,setCollapsed]=useState(false);
+  const [showUpgrade,setShowUpgrade]=useState(false);
+  const [currentUser,setCurrentUser]=useState(user);
+  const Page=PAGE_MAP[page];
+  const nav=NAV_ITEMS.find(n=>n.id===page);
+  return(
+    <div style={{display:"flex",height:"100vh",background:C.bg,fontFamily:"'Segoe UI','Noto Sans Devanagari',sans-serif",color:C.text}}>
+      {showUpgrade&&<UpgradeModal onClose={()=>setShowUpgrade(false)} onUpgrade={plan=>{setCurrentUser({...currentUser,plan:"pro",trialDays:0});setShowUpgrade(false);}}/>}
+      <div style={{width:collapsed?62:220,minWidth:collapsed?62:220,background:C.surface,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",transition:"width 0.2s,min-width 0.2s",overflow:"hidden"}}>
+        <div style={{padding:"15px 11px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:9}}>
+          <div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>⬡</div>
+          {!collapsed&&<div><div style={{fontWeight:900,fontSize:15,letterSpacing:-0.5}}>ShopOS</div><div style={{color:C.muted,fontSize:9,fontWeight:700}}>{lang==="en"?"BUSINESS MANAGER":"व्यापार व्यवस्थापक"}</div></div>}
+          <button onClick={()=>setCollapsed(!collapsed)} style={{marginLeft:"auto",background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:12,flexShrink:0}}>{collapsed?"▶":"◀"}</button>
+        </div>
+        <nav style={{flex:1,padding:"8px 5px",overflowY:"auto"}}>
+          {NAV_ITEMS.map(n=>(
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 9px",borderRadius:8,marginBottom:1,background:page===n.id?`${C.accent}18`:"transparent",border:page===n.id?`1px solid ${C.accent}40`:"1px solid transparent",color:page===n.id?C.accent:C.muted,cursor:"pointer",textAlign:"left",fontSize:12,fontWeight:page===n.id?700:500,whiteSpace:"nowrap",overflow:"hidden",fontFamily:"inherit"}}>
+              <span style={{fontSize:15,flexShrink:0}}>{n.icon}</span>
+              {!collapsed&&(lang==="en"?n.en:n.np)}
+            </button>
+          ))}
+        </nav>
+        {!collapsed&&(
+          <>
+            <div style={{padding:"0 6px 7px"}}>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,display:"flex",overflow:"hidden"}}>
+                {["en","np"].map(l=><button key={l} onClick={()=>setLang(l)} style={{flex:1,background:lang===l?C.accent:"transparent",color:lang===l?"#000":C.muted,border:"none",padding:"7px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>{l==="en"?"EN":"NP"}</button>)}
+              </div>
+            </div>
+            <div style={{padding:"0 6px 11px"}}>
+              {currentUser?.plan==="trial"?(
+                <div onClick={()=>setShowUpgrade(true)} style={{padding:10,background:`${C.gold}15`,border:`1px solid ${C.gold}35`,borderRadius:10,marginBottom:7,cursor:"pointer"}}>
+                  <div style={{color:C.gold,fontSize:10,fontWeight:700,marginBottom:1}}>⏳ {lang==="en"?"FREE TRIAL":"नि:शुल्क ट्रायल"}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{currentUser.trialDays} {lang==="en"?"days left":"दिन बाँकी"}</div>
+                </div>
+              ):(
+                <div style={{padding:10,background:`${C.accent}10`,border:`1px solid ${C.accent}28`,borderRadius:10,marginBottom:7}}>
+                  <div style={{color:C.accent,fontSize:10,fontWeight:700,marginBottom:1}}>✅ {lang==="en"?"PRO ACTIVE":"PRO सक्रिय"}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{lang==="en"?"All features enabled":"सबै सुविधाहरू"}</div>
+                </div>
+              )}
+              <button onClick={onSeller} style={{width:"100%",background:`${C.gold}18`,border:`1px solid ${C.gold}35`,color:C.gold,padding:"7px",borderRadius:8,cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700,marginBottom:6}}>
+                👑 {lang==="en"?"Seller Panel":"विक्रेता प्यानल"}
+              </button>
+              <button onClick={onLogout} style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,color:C.muted,padding:"6px",borderRadius:8,cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>
+                🚪 {lang==="en"?"Logout":"लगआउट"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      <div style={{flex:1,overflowY:"auto"}}>
+        <div style={{position:"sticky",top:0,zIndex:10,background:C.bg+"ee",backdropFilter:"blur(10px)",borderBottom:`1px solid ${C.border}`,padding:"10px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontWeight:700,fontSize:14}}>{nav?.icon} {lang==="en"?nav?.en:nav?.np}</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {currentUser?.plan==="trial"&&<Btn onClick={()=>setShowUpgrade(true)} variant="gold" style={{fontSize:11,padding:"6px 14px"}}>⚡ {lang==="en"?"Upgrade":"अपग्रेड"} ({currentUser.trialDays}d)</Btn>}
+            <div style={{display:"flex",alignItems:"center",gap:7,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 11px"}}>
+              <div style={{width:22,height:22,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900}}>{(currentUser?.shopName||"S")[0].toUpperCase()}</div>
+              <span style={{fontSize:12,fontWeight:600}}>{currentUser?.shopName||"पसल"}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{maxWidth:1080,margin:"0 auto",padding:"20px 22px"}}>
+          <Page user={currentUser} onUpgrade={()=>setShowUpgrade(true)}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShopOSRoot(){
+  const [lang,setLang]=useState("np");
+  const [screen,setScreen]=useState("landing");
+  const [user,setUser]=useState(null);
+  return(
+    <LangCtx.Provider value={{lang,setLang}}>
+      {screen==="landing"&&<Landing onLogin={()=>setScreen("login")} onSignup={()=>setScreen("signup")} onDemo={()=>{setUser({shopName:"Demo Shop",email:"demo@shopos.com",plan:"pro",trialDays:0});setScreen("app");}}/>}
+      {(screen==="login"||screen==="signup")&&<AuthScreen mode={screen} onSuccess={u=>{setUser(u);setScreen("app");}} onBack={()=>setScreen("landing")}/>}
+      {screen==="app"&&<App user={user} onLogout={()=>{setUser(null);setScreen("landing");}} onSeller={()=>setScreen("seller")}/>}
+      {screen==="seller"&&<SellerDashboard onBack={()=>setScreen("app")}/>}
+    </LangCtx.Provider>
+  );
+}
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<ShopOSRoot />);
+  const loadingScreen = document.getElementById("loading-screen");
+  if (loadingScreen) loadingScreen.remove();
+} catch (err) {
+  console.error(err);
+  const loading = document.getElementById('loading-screen');
+  const errBox = document.getElementById('error-screen');
+  const detail = document.getElementById('error-detail');
+  if (loading) loading.style.display = 'none';
+  if (errBox) errBox.classList.add('show');
+  if (detail) detail.textContent = String(err && err.stack ? err.stack : err);
+}
+</script>
+
+</body>
+</html>
